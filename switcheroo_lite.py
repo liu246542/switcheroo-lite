@@ -242,6 +242,11 @@ def check_folders(filelist, game_ids, keep_region):
     num_transferred = 0
     num_skipped = 0
     length = len(filelist)
+    if args.copy:
+        copy_strategy = lambda src,dst: copy(src, dst)
+    else:
+        copy_strategy = lambda src,dst: os.link(src, dst + '/' + os.path.basename(src))
+
 
     for mediapath in filelist:
         year = mediapath.stem[0:4]
@@ -259,7 +264,7 @@ def check_folders(filelist, game_ids, keep_region):
         except ValueError:
             logger(f"Invalid filename for media {num_transferred}: {mediapath.stem}")
 
-        posixtimestamp = time.timestamp()
+        #posixtimestamp = time.timestamp()
 
         outputfolder = args.albumpath.joinpath(
             "Organized", clean_filename(gameid, game_ids, keep_region))
@@ -267,11 +272,9 @@ def check_folders(filelist, game_ids, keep_region):
         # TODO Use better output name
         outputfolder.mkdir(parents=True, exist_ok=True)
         if args.overwrite or not os.path.exists(outputfolder / mediapath.name):
-            if args.copy:
-                newfile = copy(str(mediapath), str(outputfolder))
-                os.utime(newfile, (posixtimestamp, posixtimestamp))
-            else:
-                os.link(str(mediapath), str(outputfolder)+ '/'+ os.path.basename(mediapath))
+            copy_strategy(str(mediapath), str(outputfolder))
+            #newfile = copy(str(mediapath), str(outputfolder))
+            #os.utime(newfile, (posixtimestamp, posixtimestamp))
         else:
             num_skipped += 1
 

@@ -24,6 +24,7 @@ optional arguments:
   --no-videos           Do not organize video (.mp4) files
   --no-screenshots      Do not organize image (.jpg) files
   -q, --quiet           Don't print standard out to console
+  -c, --copy            Copy files instead of generating hard links
   ```
 
 ## How to Use
