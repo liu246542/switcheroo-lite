@@ -267,8 +267,11 @@ def check_folders(filelist, game_ids, keep_region):
         # TODO Use better output name
         outputfolder.mkdir(parents=True, exist_ok=True)
         if args.overwrite or not os.path.exists(outputfolder / mediapath.name):
-            newfile = copy(str(mediapath), str(outputfolder))
-            os.utime(newfile, (posixtimestamp, posixtimestamp))
+            if args.copy:
+                newfile = copy(str(mediapath), str(outputfolder))
+                os.utime(newfile, (posixtimestamp, posixtimestamp))
+            else:
+                os.link(str(mediapath), str(outputfolder)+ '/'+ os.path.basename(mediapath))
         else:
             num_skipped += 1
 
@@ -407,6 +410,11 @@ if __name__ == "__main__":
                         "--quiet",
                         action="store_true",
                         help="Don't print standard out to console")
+
+    parser.add_argument("-c",
+                        "--copy",
+                        action="store_true",
+                        help="Copy file instead of hard link")
 
 
     args = parser.parse_args()
