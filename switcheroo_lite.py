@@ -3,17 +3,19 @@ import sys
 import re
 import json
 import hashlib
+import requests
+import time
+import html
 from pathlib import Path
 from datetime import datetime
 from shutil import copy
 from Crypto.Cipher import AES
-from urllib.request import urlretrieve
-from urllib.error import URLError
-import xml.etree.ElementTree as ET
 
 
-PROGRAM_VERSION = 1.0
+PROGRAM_VERSION = 1.1
 DECRYPT_KEY_HASH = "24e0dc62a15c11d38b622162ea2b4383"
+
+REGION_CODE = "ar,at,au,be,bg,br,ca,ch,cl,cn,co,cy,cz,de,dk,ee,es,fi,fr,gb,gr,hk,hr,hu,ie,it,jp,kr,lt,lu,lv,mt,mx,nl,no,nz,pe,pl,pt,ro,ru,se,si,sk,us,xx,za,zh"
 
 global logger
 logger = print
@@ -54,7 +56,7 @@ def load_key(filename):
     sys.exit(1)
 
 
-def clean_filename(gameid, id_map, keep_region):
+def clean_filename(gameid, id_map):
     """
     Get folder name from a given gameid
 
@@ -70,9 +72,6 @@ def clean_filename(gameid, id_map, keep_region):
 
     keepcharacters = (' ', '.', '_')
     name = id_map[gameid]
-
-    if not keep_region:
-        name = re.sub(r" \((CHN|EUR|JPN|USA|WLD)\)", "", name)
 
     return "".join(c for c in name if c.isalnum() or c in keepcharacters).rstrip()
 
@@ -111,7 +110,8 @@ def get_gameids(force_update=False):
         force_update: grab new game titleids from nswdb.com
                       REQUIRES key.txt TO EXIST
 
-    Return: Dictionary that maps screenshot ids to filesystem unfriendly game names
+    Return: Dictionary that maps screenshot ids to filesystem
+            unfriendly game names
     """
     game_ids = {}
     logger("Reading gameids.json cache file...")
@@ -123,118 +123,60 @@ def get_gameids(force_update=False):
         print("Error reading gameids.json!")
         if not force_update:
             logger(("Error reading gameids.json! "
-                   "Please rerun the program with the --update-cache flag "
-                   "and ensure you have key.txt in the same directory as "
-                   "the executable."))
+                    "Please rerun the program with the --update-cache flag "
+                    "and ensure you have key.txt in the same directory as "
+                    "the executable."))
             sys.exit()
 
     if force_update:
         logger("Forcing update of gameids.json...")
-        download_dict = update_gameids(game_ids)
+        download_dict = update_nswdb(game_ids, REGION_CODE)
         download_dict.update(game_ids)
         return download_dict
 
     return game_ids
 
 
-def update_gameids(old_game_ids):
+def update_nswdb(old_game_ids, region="us"):
     """
-    Write out new gameids.json file
-
-    Parameters:
-        old_game_ids: dictionary that contains previous contents of gameids.json
-
-    Returns: old_game_ids but with new games added from nswdb the
-             old key/value pairs are not altered only new ones added
     """
-    key = load_key("key.txt")
-    if not key:
-        return
-
-    game_ids = update_nswdb(key)
-    game_ids.update(old_game_ids)
-
-    with open("gameids.json", "w", encoding="utf-8") as idfile:
-            json.dump(game_ids, idfile, ensure_ascii=False,
-                      indent=4, sort_keys=True)
-            # Ensure contents get written out immediately
-            idfile.flush()
-            logger("Successfully updated Game IDs")
-
-    return game_ids
-
-
-def update_nswdb(key):
-    """
-    Download nswdb database and return a dictionary with the information
-
-    Parameters:
-        key: key loaded from key.txt
-
-    Returns: dictionary that maps screenshot ids to filesystem unfriendly game names
-    """
-    logger("Downloading information from nswdb...")
-
-    try:
-        urlretrieve("http://nswdb.com/xml.php", "nswdb-games.xml")
-    except URLError as e:
-        logger("Unable to download gameids!\nError info:\n")
-        logger(e)
-        sys.exit(1)
-
-    tree = ET.parse("nswdb-games.xml")
-    root = tree.getroot()
-
+    unix_timestamp = int(time.time())
+    payload = {
+        "region": region,
+        "rating": "0",
+        "_": unix_timestamp
+    }
     id_map = {}
-    for release in root:
-            screenshotid_list = release.find("titleid").text
 
-            # Ignore blank releases
-            if screenshotid_list is None:
-                continue
+    key = load_key("key.txt")
 
-            # Remove (vXXXXX) that appear in some titleids
-            screenshotid_list = re.sub(
-                r"\(v[^)]*\)", "", screenshotid_list).strip()
+    r = requests.get("https://tinfoil.media/Title/ApiJson/", params=payload)
+    nswdb_raw = r.json()
+    for item in nswdb_raw["data"]:
+        temp_id = decrypt_titleid(key, item.get("id"))
+        temp_title = item.get("name").strip()
+        temp_title = temp_title.replace("\n", "").replace("\t", "")
+        temp_title = re.findall(r'<a.*?>(.*?)</a>', temp_title)
+        assert len(temp_title) == 1
+        id_map.setdefault(temp_id, html.unescape(temp_title[0]))
 
-            # There could be multiple titleids for a single game
-            for screenshotid in re.split(',|\s*\+\s*', screenshotid_list):
-                region = release.find("region").text
-                name = nswdb_clean_name(release.find("name").text)
+    id_map.update(old_game_ids)
+    with open(f"gameids.json", "w", encoding="utf-8") as idfile:
+        json.dump(id_map, idfile, ensure_ascii=False, indent=4, sort_keys=True)
+        idfile.flush()
+        logger("Successfully updated Game IDs")
 
-                try:
-                    screenshotid = decrypt_titleid(key, screenshotid)
-                except ValueError as e:
-                    continue  # Unable to parse specific id
-
-                id_map[screenshotid] = f"{name} ({region})"
-
-    os.remove("nswdb-games.xml")
     return id_map
 
 
-def nswdb_clean_name(name):
-    """
-    Remove garbage that nswdb stores along with it's titleids
-
-    Parameters:
-        name: dirty titleid to clean
-
-    Returns: titleid that can be passed into decrypt_titleid()
-    """
-    name = re.sub(r"\[(Rev ?|v){1,2}(( - )?[\w]+[\.,_]?)+\]", "", name)
-    name = re.sub(r"\(rev[0-9]+\)", "", name)
-    return name.strip()
-
-
-def check_folders(filelist, game_ids, keep_region):
+def check_folders(filelist, game_ids):
     """
     Main copy function
 
     Parameters:
         filelist: Path objecct of list of files to transfer
-        game_ids: dictionary that maps screenshot ids to filesystem safe game names
-        keep_region: boolean; false = don't append regions to folder name
+        game_ids: dictionary that maps screenshot ids to
+                  filesystem safe game names
 
     Returns: number of files transferred
     """
@@ -243,10 +185,9 @@ def check_folders(filelist, game_ids, keep_region):
     num_skipped = 0
     length = len(filelist)
     if args.copy:
-        copy_strategy = lambda src,dst: copy(src, dst)
+        copy_strategy = lambda src, dst: copy(src, dst)
     else:
-        copy_strategy = lambda src,dst: os.link(src, dst + '/' + os.path.basename(src))
-
+        copy_strategy = lambda src, dst: os.link(src, dst + '/' + os.path.basename(src))
 
     for mediapath in filelist:
         year = mediapath.stem[0:4]
@@ -258,42 +199,39 @@ def check_folders(filelist, game_ids, keep_region):
         gameid = mediapath.stem[17:]
 
         try:
-            time = datetime(int(year), int(month), int(day),
-                            hour=int(hour), minute=int(minute), second=int(second))
+            time = datetime(int(year), int(month), int(day), 
+                hour=int(hour), minute=int(minute), second=int(second))
 
         except ValueError:
             logger(f"Invalid filename for media {num_transferred}: {mediapath.stem}")
 
-        #posixtimestamp = time.timestamp()
+        # posixtimestamp = time.timestamp()
 
         outputfolder = args.albumpath.joinpath(
-            "Organized", clean_filename(gameid, game_ids, keep_region))
+            "Organized", clean_filename(gameid, game_ids))
 
         # TODO Use better output name
         outputfolder.mkdir(parents=True, exist_ok=True)
         if args.overwrite or not os.path.exists(outputfolder / mediapath.name):
             copy_strategy(str(mediapath), str(outputfolder))
-            #newfile = copy(str(mediapath), str(outputfolder))
-            #os.utime(newfile, (posixtimestamp, posixtimestamp))
         else:
             num_skipped += 1
 
         num_transferred += 1
 
-        logger("Organized {} of {} files ({} skipped; already exist).\r".format(num_transferred, length, num_skipped), end="")
+        logger(f"Organized {num_transferred} of {length} files ({num_skipped} skipped; already exist).\r", end="")
     logger("")
 
     return num_transferred
 
 
-def sort_images(albumpath, game_ids, keep_region):
+def sort_images(albumpath, game_ids):
     """
     Transfer all jpg images
 
     Parameters:
         albumpath: Nintendo Album directory path
         game_ids: dictionary mapping screenshot ids to filesafe game names
-        keep_region: append game region to end of folder name
 
     Returns: None
     """
@@ -305,19 +243,18 @@ def sort_images(albumpath, game_ids, keep_region):
 
     if len(screenshotlist) != 0:
         logger("Organizing screenshots...")
-        check_folders(screenshotlist, game_ids, keep_region)
+        check_folders(screenshotlist, game_ids)
     else:
         logger("No screenshots found!")
 
 
-def sort_videos(albumpath, game_ids, keep_region):
+def sort_videos(albumpath, game_ids):
     """
     Transfer all mp4 images
 
     Parameters:
         albumpath: Nintendo Album directory path
         game_ids: dictionary mapping screenshot ids to filesafe game names
-        keep_region: append game region to end of folder name
 
     Returns: None
     """
@@ -329,7 +266,7 @@ def sort_videos(albumpath, game_ids, keep_region):
 
     if len(videolist) != 0:
         logger("\nOrganizing videos...")
-        check_folders(videolist, game_ids, keep_region)
+        check_folders(videolist, game_ids)
     else:
         logger("\nNo videos found!")
 
@@ -360,10 +297,10 @@ def main(args):
         args.albumpath = point_nintendo_folder
 
     if not args.no_screenshots:
-        sort_images(args.albumpath, game_ids, args.include_regions)
+        sort_images(args.albumpath, game_ids)
 
     if not args.no_videos:
-        sort_videos(args.albumpath, game_ids, args.include_regions)
+        sort_videos(args.albumpath, game_ids)
 
     logger("Done!")
 
@@ -376,7 +313,7 @@ if __name__ == "__main__":
     # to do that but it's supported I guess.
 
     parser = argparse.ArgumentParser(
-                description="Automatically organize and timestamp \
+        description="Automatically organize and timestamp \
                  your Nintendo Switch screenshots and clips")
 
     parser.add_argument("--version", action="version",
@@ -390,12 +327,8 @@ if __name__ == "__main__":
     parser.add_argument("-u",
                         "--update-cache",
                         action="store_true",
-                        help="Update cached games list via online database. Requires key.txt to be present")
-
-    parser.add_argument("-r",
-                        "--include-regions",
-                        action="store_true",
-                        help="Include game region - USA, JPN, etc. - in the folder name")
+                        help="Update cached games list via online \
+                        database. Requires key.txt to be present")
 
     parser.add_argument("--overwrite",
                         action="store_true",
@@ -418,7 +351,6 @@ if __name__ == "__main__":
                         "--copy",
                         action="store_true",
                         help="Copy file instead of hard link")
-
 
     args = parser.parse_args()
     main(args)
