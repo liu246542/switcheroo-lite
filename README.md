@@ -11,7 +11,7 @@ A fork of [nxshot](https://github.com/s1cp/nxshot) that has some improved intern
 This can also be obtained by running the python script with the `--help` flag
 
 ```text
-usage: switcheroo_lite.py [-h] [--version] [-u] [-r] [--overwrite] [--no-videos] [--no-screenshots] [-q] ALBUMPATH
+usage: switcheroo_lite.py [-h] [--version] [-u] [--overwrite] [--no-videos] [--no-screenshots] [-q] ALBUMPATH
 
 Automatically organize and timestamp your Nintendo Switch screenshots and clips
 
@@ -22,8 +22,6 @@ optional arguments:
   -h, --help            show this help message and exit
   --version             show program's version number and exit
   -u, --update-cache    Update cached games list via online database. Requires key.txt to be present
-  -r, --include-regions
-                        Include game region - USA, JPN, etc. - in the folder name
   --overwrite           Overwrite file if it already exists
   --no-videos           Do not organize video (.mp4) files
   --no-screenshots      Do not organize image (.jpg) files
