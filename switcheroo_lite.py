@@ -291,6 +291,16 @@ def main(args):
 
     game_ids = get_gameids(args.update_cache)
 
+    # If only updating cache, don't process files
+    if args.update_cache:
+        logger("Cache update complete. Exiting.")
+        return
+
+    # Check if albumpath is provided when not just updating cache
+    if args.albumpath is None:
+        logger("Error: albumpath is required when not using --update-cache only")
+        sys.exit(1)
+
     # Check if user pointed towards Nintendo/ instead of Nintendo/Album
     point_nintendo_folder = args.albumpath.joinpath("Album")
     if os.path.exists(point_nintendo_folder):
@@ -322,6 +332,7 @@ if __name__ == "__main__":
     parser.add_argument("albumpath",
                         metavar="ALBUMPATH",
                         type=Path,
+                        nargs='?',
                         help="'Nintendo/Album' folder from your SD card.")
 
     parser.add_argument("-u",
