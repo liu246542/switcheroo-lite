@@ -1,18 +1,18 @@
-import os
-import sys
-import re
-import json
 import hashlib
-import requests
-import time
 import html
-from pathlib import Path
+import json
+import os
+import re
+import sys
+import time
 from datetime import datetime
+from pathlib import Path
 from shutil import copy
+
+import requests
 from Crypto.Cipher import AES
 
-
-PROGRAM_VERSION = 1.1
+PROGRAM_VERSION = 2.0
 DECRYPT_KEY_HASH = "24e0dc62a15c11d38b622162ea2b4383"
 
 REGION_CODE = "ar,at,au,be,bg,br,ca,ch,cl,cn,co,cy,cz,de,dk,ee,es,fi,fr,gb,gr,hk,hr,hu,ie,it,jp,kr,lt,lu,lv,mt,mx,nl,no,nz,pe,pl,pt,ro,ru,se,si,sk,us,xx,za,zh"
@@ -89,13 +89,19 @@ def decrypt_titleid(key, titleid):
     cipher = AES.new(key, AES.MODE_ECB)
 
     titleidb = bytes.fromhex(titleid)
-    titleidb = titleidb[7::-1]
-    conversion = titleidb.hex()
-    conversion = conversion.ljust(32, "0")
-    titleidb = bytes.fromhex(conversion)
-    encrypted = cipher.encrypt(titleidb)
-    screenshotid = encrypted.hex().upper()
-
+    if titleid[0:4] == "0400":
+        titleidb = titleidb[::-1]
+        titleidb = titleidb + bytes.fromhex("0000010000000000")
+        encrypted = cipher.encrypt(titleidb)
+        screenshotid = encrypted.hex().upper() + "L"
+    else:
+        # default start "0000"
+        titleidb = titleidb[7::-1]
+        conversion = titleidb.hex()
+        conversion = conversion.ljust(32, "0")
+        titleidb = bytes.fromhex(conversion)
+        encrypted = cipher.encrypt(titleidb)
+        screenshotid = encrypted.hex().upper()
     return screenshotid
 
 
@@ -199,7 +205,7 @@ def check_folders(filelist, game_ids):
         gameid = mediapath.stem[17:]
 
         try:
-            time = datetime(int(year), int(month), int(day), 
+            time = datetime(int(year), int(month), int(day),
                 hour=int(hour), minute=int(minute), second=int(second))
 
         except ValueError:
