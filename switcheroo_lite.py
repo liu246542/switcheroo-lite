@@ -137,8 +137,7 @@ def get_gameids(force_update=False):
     if force_update:
         logger("Forcing update of gameids.json...")
         download_dict = update_nswdb(game_ids, REGION_CODE)
-        download_dict.update(game_ids)
-        return download_dict
+        game_ids.update(download_dict)
 
     return game_ids
 
@@ -166,13 +165,13 @@ def update_nswdb(old_game_ids, region="us"):
         assert len(temp_title) == 1
         id_map.setdefault(temp_id, html.unescape(temp_title[0]))
 
-    id_map.update(old_game_ids)
+    old_game_ids.update(id_map)
     with open(f"gameids.json", "w", encoding="utf-8") as idfile:
-        json.dump(id_map, idfile, ensure_ascii=False, indent=4, sort_keys=True)
+        json.dump(old_game_ids, idfile, ensure_ascii=False, indent=4, sort_keys=True)
         idfile.flush()
         logger("Successfully updated Game IDs")
 
-    return id_map
+    return old_game_ids
 
 
 def check_folders(filelist, game_ids):
