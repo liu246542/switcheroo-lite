@@ -1,10 +1,7 @@
 import hashlib
-import html
 import json
 import os
-import re
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 from shutil import copy
@@ -16,6 +13,9 @@ PROGRAM_VERSION = 2.0
 DECRYPT_KEY_HASH = "24e0dc62a15c11d38b622162ea2b4383"
 
 REGION_CODE = "ar,at,au,be,bg,br,ca,ch,cl,cn,co,cy,cz,de,dk,ee,es,fi,fr,gb,gr,hk,hr,hu,ie,it,jp,kr,lt,lu,lv,mt,mx,nl,no,nz,pe,pl,pt,ro,ru,se,si,sk,us,xx,za,zh"
+
+REGION_LIST = ["KR", "JP", "JP", "US", "HK", "CN", "CN"]
+LANGUAGE_LIST = ["ko", "ja", "en", "en", "zh", "en", "zh"]
 
 global logger
 logger = print
@@ -136,41 +136,52 @@ def get_gameids(force_update=False):
 
     if force_update:
         logger("Forcing update of gameids.json...")
-        download_dict = update_nswdb(game_ids, REGION_CODE)
-        game_ids.update(download_dict)
+        for (x, y) in zip(REGION_LIST, LANGUAGE_LIST):
+            update_nswdb(x, y)
+        game_ids = merge_json(REGION_LIST, LANGUAGE_LIST)
 
     return game_ids
 
 
-def update_nswdb(old_game_ids, region="us"):
+def update_nswdb(region="HK", language="zh"):
     """
     """
-    unix_timestamp = int(time.time())
-    payload = {
-        "region": region,
-        "rating": "0",
-        "_": unix_timestamp
-    }
-    id_map = {}
-
     key = load_key("key.txt")
-
-    r = requests.get("https://tinfoil.media/Title/ApiJson/", params=payload)
+    req_url = f"https://raw.githubusercontent.com/blawar/titledb/refs/heads/master/{region}.{language}.json"
+    r = requests.get(req_url)
     nswdb_raw = r.json()
-    for item in nswdb_raw["data"]:
-        temp_id = decrypt_titleid(key, item.get("id"))
-        temp_title = item.get("name").strip()
-        temp_title = temp_title.replace("\n", "").replace("\t", "")
-        temp_title = re.findall(r'<a.*?>(.*?)</a>', temp_title)
-        assert len(temp_title) == 1
-        id_map.setdefault(temp_id, html.unescape(temp_title[0]))
+    id_map = {}
+    for k in nswdb_raw.keys():
+        info = nswdb_raw.get(k)
+        original_id = info.get("id")
+        if original_id is None:
+            continue
+        temp_id = decrypt_titleid(key, str(original_id))
+        temp_title = info.get("name")
+        if temp_title is None:
+            continue
+        id_map.setdefault(temp_id, temp_title)
+    with open(f"gameids-{region}-{language}.json", "w", encoding="utf-8") as idfile:
+        json.dump(id_map, idfile, ensure_ascii=False, indent=4, sort_keys=True)
+        idfile.flush()
+        logger(f"Successfully updated Game IDs ({region}-{language})")
 
-    old_game_ids.update(id_map)
+
+def merge_json(region_list, lang_list):
+    assert len(region_list) == len(lang_list)
+    try:
+        with open("gameids.json", "r", encoding="utf-8") as idfile:
+            old_game_ids = json.load(idfile)
+    except (FileNotFoundError, json.decoder.JSONDecodeError):
+        old_game_ids = {}
+    for (x, y) in zip(region_list, lang_list):
+        with open(f"gameids-{x}-{y}.json", "r", encoding="utf-8") as idfile:
+            new_game_ids = json.load(idfile)
+        old_game_ids.update(new_game_ids)
     with open(f"gameids.json", "w", encoding="utf-8") as idfile:
         json.dump(old_game_ids, idfile, ensure_ascii=False, indent=4, sort_keys=True)
         idfile.flush()
-        logger("Successfully updated Game IDs")
-
+        logger("Successfully merged Game IDs")
     return old_game_ids
 
 
