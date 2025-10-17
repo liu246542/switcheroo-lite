@@ -14,8 +14,8 @@ DECRYPT_KEY_HASH = "24e0dc62a15c11d38b622162ea2b4383"
 
 REGION_CODE = "ar,at,au,be,bg,br,ca,ch,cl,cn,co,cy,cz,de,dk,ee,es,fi,fr,gb,gr,hk,hr,hu,ie,it,jp,kr,lt,lu,lv,mt,mx,nl,no,nz,pe,pl,pt,ro,ru,se,si,sk,us,xx,za,zh"
 
-REGION_LIST = ["KR", "JP", "JP", "US", "HK", "CN", "CN"]
-LANGUAGE_LIST = ["ko", "ja", "en", "en", "zh", "en", "zh"]
+REGION_LIST = ["KR", "JP", "JP", "GB", "US", "HK", "CN"]
+LANGUAGE_LIST = ["ko", "ja", "en", "en", "en", "zh", "zh"]
 
 global logger
 logger = print
