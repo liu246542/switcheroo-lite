@@ -3,7 +3,7 @@ name: Update Game IDs
 on:
   schedule:
     # Run daily at 00:00 UTC
-    - cron: '0 0 * * *'
+    - cron: '40 8 * * *'
   workflow_dispatch:
     # Allow manual trigger
 
