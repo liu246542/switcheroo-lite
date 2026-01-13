@@ -1,7 +1,10 @@
 import hashlib
+import html
 import json
 import os
+import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from shutil import copy
@@ -143,6 +146,28 @@ def get_gameids(force_update=False):
     return game_ids
 
 
+def update_nswdb_tinfoil(old_game_ids, region="us"):
+    unix_timestamp = int(time.time())
+    payload = {
+        "region": region,
+        "rating": "0",
+        "_": unix_timestamp
+    }
+    id_map = {}
+    key = load_key("key.txt")
+    r = requests.get("https://tinfoil.media/Title/ApiJson/", params=payload)
+    nswdb_raw = r.json()
+    for item in nswdb_raw["data"]:
+        temp_id = decrypt_titleid(key, item.get("id"))
+        temp_title = item.get("name").strip()
+        temp_title = temp_title.replace("\n", "").replace("\t", "")
+        temp_title = re.findall(r'<a.*?>(.*?)</a>', temp_title)
+        assert len(temp_title) == 1
+        id_map.setdefault(temp_id, html.unescape(temp_title[0]))
+    old_game_ids.update(id_map)
+    logger(f"Successfully updated Game IDs (via tinfoil)")
+
+
 def update_nswdb(region="HK", language="zh"):
     """
     """
@@ -174,6 +199,7 @@ def merge_json(region_list, lang_list):
             old_game_ids = json.load(idfile)
     except (FileNotFoundError, json.decoder.JSONDecodeError):
         old_game_ids = {}
+    update_nswdb_tinfoil(old_game_ids)
     for (x, y) in zip(region_list, lang_list):
         with open(f"gameids-{x}-{y}.json", "r", encoding="utf-8") as idfile:
             new_game_ids = json.load(idfile)
