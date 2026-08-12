@@ -175,6 +175,10 @@ def update_nswdb(region="HK", language="zh"):
         original_id = info.get("id")
         if original_id is None:
             continue
+        # Skip DLC/add-on content: base games end with '000',
+        # DLC title IDs end with '001'-'FFF'
+        if int(original_id[-3:], 16) != 0:
+            continue
         temp_id = decrypt_titleid(key, str(original_id))
         temp_title = info.get("name")
         if temp_title is None:
