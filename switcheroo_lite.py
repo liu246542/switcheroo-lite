@@ -146,16 +146,10 @@ def get_gameids(force_update=False):
     return game_ids
 
 
-def update_nswdb_tinfoil(old_game_ids, region="us"):
-    unix_timestamp = int(time.time())
-    payload = {
-        "region": region,
-        "rating": "0",
-        "_": unix_timestamp
-    }
+def update_nswdb_tinfoil(old_game_ids):
     id_map = {}
     key = load_key("key.txt")
-    r = requests.get("https://tinfoil.media/Title/ApiJson/", params=payload)
+    r = requests.get("https://tinfoil.media/Title/ApiJson/")
     nswdb_raw = r.json()
     for item in nswdb_raw["data"]:
         temp_id = decrypt_titleid(key, item.get("id"))
